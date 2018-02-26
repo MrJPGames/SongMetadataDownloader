@@ -1,9 +1,5 @@
 <?php
 	error_reporting(E_ERROR);
-	require 'PHP-ID3/PhpId3/BinaryFileReader.php';
-	require 'PHP-ID3/PhpId3/Id3Tags.php';
-	require 'PHP-ID3/PhpId3/Id3TagsReader.php';
-	use PhpId3\Id3TagsReader;
 
 	$TaggingFormat = 'UTF-8';
 
@@ -21,14 +17,18 @@
 	$dirContent = scandir($directory);
 	foreach($dirContent as $file){
 		if (file_exists(__DIR__ . "/" . $directory . "/" . $file) && pathinfo($file, PATHINFO_EXTENSION) == 'mp3'){
-			$id3 = new Id3TagsReader(fopen(__DIR__ . "/" . $directory . "/" .  $file, "rb"));
-	        $id3->readAllTags();
 
-			$id3Data = $id3->getId3Array();
+			$ThisFileInfo = $getID3->analyze(__DIR__ . "/" . $directory . "/" . $file);
 
-			$query = str_replace(" ", "+", $id3Data["TIT2"]["body"] . " " . $id3Data["TPE1"]["body"]);
+			getid3_lib::CopyTagsToComments($ThisFileInfo);
 
-			echo "Searching Genius for metadata for: ", $id3Data["TIT2"]["body"], " ", $id3Data["TPE1"]["body"], PHP_EOL;
+			$metadata = $ThisFileInfo["tags"]["id3v2"];
+			//var_export($metadata);
+			
+
+			$query = str_replace(" ", "+", $metadata["title"][0] . " " . $metadata["artist"][0]);
+
+			echo "Searching Genius for metadata for: ", $metadata["title"][0], " ", $metadata["artist"][0], PHP_EOL;
 
 			//Start searching based on song name + artist
 			$dURL = "https://genius.com/api/search/song?per_page=5&q=" . $query;
@@ -50,6 +50,7 @@
 				$metadata["title"][0] = $songData["title"];
 				//Song Artist(s)
 				if ($songData["featured_artists"][0] == NULL){
+					$metadata["band"][0] = $songData["primary_artist"]["name"];
 					$metadata["artist"][0] = $songData["primary_artist"]["name"];
 				}else{
 					//Correct handling of featured artist data
@@ -90,7 +91,8 @@
 				//Release date
 				$metadata["date"][0] = $songData["release_date"];
 				//Album name
-				$metadata["album"][0] = $albumData["name"];
+				if ($albumData["name"] != "")
+					$metadata["album"][0] = $albumData["name"];
 				//Year
 				$metadata["year"][0] = $songData["release_date_components"]["year"];
 

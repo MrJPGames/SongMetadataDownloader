@@ -1,6 +1,3 @@
-[submodule "PHP-ID3"]
-	path = PHP-ID3
-	url = https://github.com/shubhamjain/PHP-ID3
 [submodule "getID3"]
 	path = getID3
 	url = https://github.com/JamesHeinrich/getID3
