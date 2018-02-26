@@ -37,7 +37,7 @@
 			//Skip folders . and .. (would case issues in recursive otherwise)
 			if ($file == "." || $file == "..")
 				continue;
-			if (is_dir($file)){
+			if (is_dir($dir . "/" . $file)){
 				if ($recursive)
 					scanDirectory($dir . "/" . $file);
 				continue;
@@ -153,6 +153,8 @@
 					    $metadata["unsynchronised_lyric"][0] = $rowNode->nodeValue;
 					}
 
+					$metadata["comment"][0] = "This files metadata was set with SongMetadataDownloader!";
+
 					echo "Metadata was found! Songtitle: ", $songData["title"], " Artist: ", $songData["primary_artist"]["name"], " Album: ", $albumData["name"], PHP_EOL;
 
 
@@ -174,7 +176,7 @@
 					echo "[!] Did not find any song for " . $query, PHP_EOL;
 				}
 			}else{
-				echo "Skipped ", $file, PHP_EOL;
+			//	echo "Skipped ", $file, PHP_EOL;
 			}
 		}
 	}
