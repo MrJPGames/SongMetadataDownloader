@@ -19,7 +19,7 @@
 
 	//unset($argv[0]);
 	//$query = implode($argv, "+");
-	if (is_dir($directory)){
+	if (is_dir(__DIR__ . "/" . $directory)){
 		scanDirectory(__DIR__ . "/" . $directory, $recursive);
 	}else if (is_dir($directory)){
 		scanDirectory($directory, $recursive);
