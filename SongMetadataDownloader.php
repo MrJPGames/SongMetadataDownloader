@@ -1,7 +1,6 @@
 <?php
 	error_reporting(E_ERROR);
 	$options = getopt("d:r");
-	echo "Statring metadata downloader", PHP_EOL;
 
 	if (!isset($options["d"])){
 		echo "No directory set!";
@@ -20,7 +19,13 @@
 
 	//unset($argv[0]);
 	//$query = implode($argv, "+");
-	scanDirectory($directory, $recursive);
+	if (is_dir($directory)){
+		scanDirectory(__DIR__ . "/" . $directory, $recursive);
+	}else if (is_dir($directory)){
+		scanDirectory($directory, $recursive);
+	}else{
+		echo "Not a valid directory!", PHP_EOL;
+	}
 
 	function scanDirectory($dir, $recursive){
 		$getID3 = new getID3;
@@ -28,6 +33,7 @@
 		getid3_lib::IncludeDependency(GETID3_INCLUDEPATH.'write.php', __FILE__, true);
 		echo "Now scanning directory: ", $dir, PHP_EOL;
 		$dirContent = scandir($dir);
+		foreach($dirContent as $file){
 			//Skip folders . and .. (would case issues in recursive otherwise)
 			if ($file == "." || $file == "..")
 				continue;
@@ -36,9 +42,9 @@
 					scanDirectory($dir . "/" . $file);
 				continue;
 			}
-			if (file_exists(__DIR__ . "/" . $dir . "/" . $file) && pathinfo($file, PATHINFO_EXTENSION) == 'mp3'){
+			if (file_exists($dir . "/" . $file) && pathinfo($file, PATHINFO_EXTENSION) == 'mp3'){
 
-				$ThisFileInfo = $getID3->analyze(__DIR__ . "/" . $dir . "/" . $file);
+				$ThisFileInfo = $getID3->analyze($dir . "/" . $file);
 
 				getid3_lib::CopyTagsToComments($ThisFileInfo);
 
@@ -152,7 +158,7 @@
 
 					//Start writing tags
 					$tagwriter = new getid3_writetags;
-					$tagwriter->filename       = __DIR__ . "/" . $dir . "/" . $file;
+					$tagwriter->filename       = $dir . "/" . $file;
 					$tagwriter->tagformats     = ['id3v2.3'];
 					$tagwriter->overwrite_tags = true;
 					$tagwriter->tag_encoding   = $TaggingFormat;
