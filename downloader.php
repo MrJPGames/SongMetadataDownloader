@@ -5,88 +5,149 @@
 	require 'PHP-ID3/PhpId3/Id3TagsReader.php';
 	use PhpId3\Id3TagsReader;
 
+	$TaggingFormat = 'UTF-8';
+
+	require_once('getID3/getid3/getid3.php');
+
+
+	$getID3 = new getID3;
+	$getID3->setOption(array('encoding'=>$TaggingFormat));
+	getid3_lib::IncludeDependency(GETID3_INCLUDEPATH.'write.php', __FILE__, true);
+
 	//unset($argv[0]);
 	//$query = implode($argv, "+");
 
-	$filename = $argv[1];
-	if (file_exists($filename)){
-        $id3 = new Id3TagsReader(fopen(__DIR__ . "/". $filename, "rb"));
-        $id3->readAllTags();
+	$directory = $argv[1];
+	$dirContent = scandir($directory);
+	foreach($dirContent as $file){
+		if (file_exists(__DIR__ . "/" . $directory . "/" . $file) && pathinfo($file, PATHINFO_EXTENSION) == 'mp3'){
+			$id3 = new Id3TagsReader(fopen(__DIR__ . "/" . $directory . "/" .  $file, "rb"));
+	        $id3->readAllTags();
 
-        foreach($id3->getId3Array() as $key => $value) {
-			if( $key !== "APIC" ) { //Skip Image data
-				echo $value["fullTagName"] . ": " . $value["body"] . PHP_EOL; 
-		    }else{
-		    	echo "Image";
-		    }
-		}
+			$id3Data = $id3->getId3Array();
 
-		$id3Data = $id3->getId3Array();
+			$query = str_replace(" ", "+", $id3Data["TIT2"]["body"] . " " . $id3Data["TPE1"]["body"]);
 
-		$query = str_replace(" ", "+", $id3Data["TIT2"]["body"] . " " . $id3Data["TPE1"]["body"]);
+			echo "Searching Genius for metadata for: ", $id3Data["TIT2"]["body"], " ", $id3Data["TPE1"]["body"], PHP_EOL;
+
+			//Start searching based on song name + artist
+			$dURL = "https://genius.com/api/search/song?per_page=5&q=" . $query;
+
+			$ch = curl_init($dURL);
+
+		    //return the transfer as a string 
+		    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1); 
+
+		    $result = curl_exec($ch);  
+
+			$searchData = json_decode($result, true);
+			
+			//Check if Genius returns any search results
+			if ($searchData["response"]["sections"][0]["hits"][0]["result"] != NULL){
+				$songData = $searchData["response"]["sections"][0]["hits"][0]["result"];
+
+				//Song Title
+				$metadata["title"][0] = $songData["title"];
+				//Song Artist(s)
+				if ($songData["featured_artists"][0] == NULL){
+					$metadata["artist"][0] = $songData["primary_artist"]["name"];
+				}else{
+					//Correct handling of featured artist data
+					$i=0;
+					foreach($songData["featured_artists"] as $feature){
+						$features[$i] = $feature["name"];
+						$i++;
+					}
+					$metadata["band"][0] = $songData["artist"] . " (Ft. " . implode(" ", $features) . ")";
+					$metadata["original_artist"][0] = $songData["primary_artist"]["name"] . " (Ft. " . implode(" ", $features) . ")";
+				}
+				$songArtURL = $songData["header_image_url"];
+
+				if ($songArtURL != NULL){
+					$dURL = $songArtURL;
+					curl_setopt($ch, CURLOPT_URL, $dURL);
+
+				    $songArtData = curl_exec($ch);
+
+				    $metadata["attached_picture"][0]["data"] = $songArtData;
+				    $metadata["attached_picture"][0]["picturetypeid"] = 0x03; //Cover (front) art
+				    $metadata["attached_picture"][0]["description"] = "Cover added by SongMetadataDownloader";
+				    $metadata["attached_picture"][0]["mime"] = "image/jpeg";
+				    unset($songArtData);
+				}
+
+				$dURL = "https://genius.com/api" . $songData["api_path"];
+
+				curl_setopt($ch, CURLOPT_URL, $dURL);
+
+			    $result = curl_exec($ch); 
+
+				$jsonData = json_decode($result, true);
+
+				$songData = $jsonData["response"]["song"];
+				$albumData = $jsonData["response"]["song"]["album"];
+
+				//Release date
+				$metadata["date"][0] = $songData["release_date"];
+				//Album name
+				$metadata["album"][0] = $albumData["name"];
+				//Year
+				$metadata["year"][0] = $songData["release_date_components"]["year"];
+
+				//Does Genius know who the writers are?
+				if ($songData["writer_artists"][0] != NULL){
+					$i=0;
+					foreach($songData["writer_artists"] as $writer){
+						$writers[$i] = $writer["name"];
+						$i++;
+					}
+					$metadata["lyricist"][0] = implode(", ", $writers);
+				}
+
+				//Get lyrics (From HTML data)
+				$dURL = "https://genius.com" . $songData["path"];
+
+				curl_setopt($ch, CURLOPT_URL, $dURL);
+
+				$result = curl_exec($ch);
+
+				$breaks = array("<br />","<br>","<br/>", "            ");  
+				$result = str_ireplace($breaks, "", $result);
+
+				$HTMLdoc = new DOMDocument();
+				$HTMLdoc->loadHTML($result);
+
+				$xpath = new DomXpath($HTMLdoc);
+
+				$rowNode = $xpath->query('//div[@class="lyrics"]')->item(0);
+				if ($rowNode instanceof DomElement) {
+				    //Lyrics found
+				    $metadata["unsynchronised_lyric"][0] = $rowNode->nodeValue;
+				}
+
+				echo "Metadata was found! Songtitle: ", $songData["title"], " Artist: ", $songData["primary_artist"]["name"], " Album: ", $albumData["name"], PHP_EOL;
 
 
-		$dURL = "https://genius.com/api/search/song?per_page=5&q=" . $query;
+				//Start writing tags
+				$tagwriter = new getid3_writetags;
+				$tagwriter->filename       = __DIR__ . "/" . $directory . "/" . $file;
+				$tagwriter->tagformats     = ['id3v2.3'];
+				$tagwriter->overwrite_tags = true;
+				$tagwriter->tag_encoding   = $TaggingFormat;
+				$tagwriter->tag_data	   = $metadata;
+				if ($tagwriter->WriteTags()) {
+					echo "Wrote Metadata!", PHP_EOL;
+				}else{
+					echo "Failed to write metadata to file!", PHP_EOL, "Error: ", html_entity_decode(strip_tags($tagwriter->errors[0])), PHP_EOL;
+				}
 
-		$ch = curl_init($dURL);
 
-	    //return the transfer as a string 
-	    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1); 
-
-	    $result = curl_exec($ch);  
-
-		$searchData = json_decode($result, true);
-		
-		if ($searchData["response"]["sections"][0]["hits"][0]["result"] != NULL){
-			$songData = $searchData["response"]["sections"][0]["hits"][0]["result"];
-
-			echo "Title: ", $songData["title"], PHP_EOL;
-			echo "Title with featured: ", $songData["title_with_featured"], PHP_EOL; 
-			echo "Artist: ", $songData["primary_artist"]["name"], PHP_EOL;
-			echo "Album art image URL: ", $songData["header_image_url"], PHP_EOL;
-
-			$dURL = "https://genius.com/api" . $songData["api_path"];
-
-			echo "API URL: ", $songData["api_path"], PHP_EOL;
-
-			curl_setopt($ch, CURLOPT_URL, $dURL);
-
-		    $result = curl_exec($ch); 
-
-			$jsonData = json_decode($result, true);
-
-			$songData = $jsonData["response"]["song"];
-			$albumData = $jsonData["response"]["song"]["album"];
-
-			echo "Full Title: ",  $songData["full_title"], PHP_EOL;
-			echo "Release date: ", $songData["release_date"], PHP_EOL;
-			echo "Recording Location: ", $songData["recording_location"], PHP_EOL;
-			echo "Album name: ", $albumData["name"], PHP_EOL;
-			echo "Lyrics page URL: ", $songData["path"];
-
-			$dURL = "https://genius.com".$songData["path"];
-
-			curl_setopt($ch, CURLOPT_URL, $dURL);
-
-			$result = curl_exec($ch);
-
-			$breaks = array("<br />","<br>","<br/>", "            ");  
-			$result = str_ireplace($breaks, "", $result);
-
-			$HTMLdoc = new DOMDocument();
-			$HTMLdoc->loadHTML($result);
-
-			$xpath = new DomXpath($HTMLdoc);
-
-			$rowNode = $xpath->query('//div[@class="lyrics"]')->item(0);
-			if ($rowNode instanceof DomElement) {
-			    echo $rowNode->nodeValue;
+			}else{
+				echo "[!] Did not find any song for " . $query, PHP_EOL;
 			}
 		}else{
-			echo "[!] Did not find any song for " . $query, PHP_EOL;
+			echo "Skipped ", $file, PHP_EOL;
 		}
-	}else{
-		echo "File not found!";
 	}
     curl_close($ch); 
 ?>
