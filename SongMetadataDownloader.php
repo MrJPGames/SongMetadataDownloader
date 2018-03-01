@@ -3,7 +3,7 @@
 	$options = getopt("d:r");
 
 	if (!isset($options["d"])){
-		echo "No directory set!";
+		echo "No directory set!", PHP_EOL;
 		exit;
 	}
 	$directory = $options["d"];
@@ -58,7 +58,7 @@
 				echo "Searching Genius for metadata for: ", $metadata["title"][0], " ", $metadata["artist"][0], PHP_EOL;
 
 				//Start searching based on song name + artist
-				$dURL = "https://genius.com/api/search/song?per_page=5&q=" . $query;
+				$dURL = "https://genius.com/api/search/song?per_page=5&q=" . urlencode($query);
 
 				$ch = curl_init($dURL);
 
