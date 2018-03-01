@@ -39,7 +39,7 @@
 				continue;
 			if (is_dir($dir . "/" . $file)){
 				if ($recursive)
-					scanDirectory($dir . "/" . $file);
+					scanDirectory($dir . "/" . $file, $recursive);
 				continue;
 			}
 			if (file_exists($dir . "/" . $file) && pathinfo($file, PATHINFO_EXTENSION) == 'mp3'){
@@ -49,6 +49,7 @@
 				getid3_lib::CopyTagsToComments($ThisFileInfo);
 
 				$metadata = $ThisFileInfo["tags"]["id3v2"];
+				$ometadata=$metadata;
 				//var_export($metadata);
 				
 
@@ -152,11 +153,15 @@
 					    //Lyrics found
 					    $metadata["unsynchronised_lyric"][0] = $rowNode->nodeValue;
 					}
-
+					if (isset($metadata["comment"])){
+						unset($metadata["comment"]);
+					}
 					$metadata["comment"][0] = "This files metadata was set with SongMetadataDownloader!";
+					if (isset($metadata["text"])){
+						unset($metadata["text"]);
+					}
 
 					echo "Metadata was found! Songtitle: ", $songData["title"], " Artist: ", $songData["primary_artist"]["name"], " Album: ", $albumData["name"], PHP_EOL;
-
 
 					//Start writing tags
 					$tagwriter = new getid3_writetags;
@@ -169,6 +174,9 @@
 						echo "Wrote Metadata!", PHP_EOL;
 					}else{
 						echo "Failed to write metadata to file!", PHP_EOL, "Error: ", html_entity_decode(strip_tags($tagwriter->errors[0])), PHP_EOL;
+						$string = "File: ".$file.PHP_EOL."Metadata: ".json_encode($metadata).PHP_EOL."Original metadata: ".json_encode($ometadata).PHP_EOL."Error: ".html_entity_decode(strip_tags($tagwriter->errors[0])).PHP_EOL;
+						file_put_contents("FailedMetadataWrites.txt", file_get_contents("FailedMetadataWrites.txt").$string.PHP_EOL);
+
 					}
 
 
