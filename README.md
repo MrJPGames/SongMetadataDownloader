@@ -1,6 +1,10 @@
 # SongMetadataDownloader
-Downlaods metadata from Genius for all mp3's in a directory
+Downloads metadata from Genius for all mp3's in a directory
 
 Usage:
 ---
-```php downloader.php directory_name```
+```php downloader.php -d directory_name```
+
+Add -r for recursive folder searching
+
+Directory names can be relative to current directory or absolute paths
